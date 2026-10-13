@@ -4,6 +4,7 @@ import { PRODUCTS as INITIAL_PRODUCTS } from '../data/products';
 import {
   supabase,
   DEFAULT_SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
   testSupabaseConnection
 } from '../lib/supabase';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -477,7 +478,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setIsConnectingSupabase(true);
     try {
-      const client = createClient(targetUrl, 'sb_publishable_c2nMLwJMNOrM8PKeHwp-rA_2lr2cEzt');
+      const client = createClient(targetUrl, SUPABASE_PUBLISHABLE_KEY);
       setActiveSupabaseClient(client);
 
       // 1. Ping ultra rápido (< 1s) para verificar conectividade e obter contagem exata

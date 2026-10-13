@@ -2201,8 +2201,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
               </div>
 
               <div style={{ fontSize: '11.5px', color: '#64748B', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div>🔑 <strong>Publishable Key:</strong> <code style={{ backgroundColor: '#EEF2F6', padding: '2px 4px', borderRadius: '4px' }}>sb_publishable_c2n...Ezt</code> (Configurada)</div>
-                <div>🔒 <strong>Secret Key:</strong> <code style={{ backgroundColor: '#EEF2F6', padding: '2px 4px', borderRadius: '4px' }}>sb_secret_K-t71...EVH</code> (Configurada)</div>
+                <div>🔑 <strong>Publishable Key:</strong> <code style={{ backgroundColor: '#EEF2F6', padding: '2px 4px', borderRadius: '4px' }}>Protegida no Ambiente (.env)</code></div>
+                <div>🔒 <strong>Secret Key:</strong> <code style={{ backgroundColor: '#EEF2F6', padding: '2px 4px', borderRadius: '4px' }}>Protegida no Ambiente (.env)</code></div>
               </div>
             </div>
 

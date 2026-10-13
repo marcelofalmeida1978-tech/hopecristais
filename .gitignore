@@ -16,7 +16,9 @@ dist-ssr/
 
 # Environment and sensitive keys
 .env
+.env.local
 .env.*
+.env*.local
 !.env.example
 
 # Vercel

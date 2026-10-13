@@ -7,8 +7,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-const SUPABASE_URL = 'https://tzicihnadrkynzupsdqp.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_c2nMLwJMNOrM8PKeHwp-rA_2lr2cEzt';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://tzicihnadrkynzupsdqp.supabase.co';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
