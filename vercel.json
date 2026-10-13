@@ -1,0 +1,27 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/biolink",
+      "destination": "/biolink/index.html"
+    },
+    {
+      "source": "/biolink/",
+      "destination": "/biolink/index.html"
+    },
+    {
+      "source": "/biolink/(.*)",
+      "destination": "/biolink/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

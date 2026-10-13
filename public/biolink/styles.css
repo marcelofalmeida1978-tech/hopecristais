@@ -1,0 +1,1249 @@
+/* ==========================================================================
+   HOPE CRISTAIS — BIO LINK PREMIUM (MINI VITRINE DIGITAL)
+   Aesthetic: Luxury Obsidian, Nocturnal Amethyst & Luminous Crystals
+   Mobile-First • Ultra-Refined • Editorial • 3D Floating Showcase
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. DESIGN TOKENS & SYSTEM VARIABLES
+   -------------------------------------------------------------------------- */
+:root {
+  /* Brand Core Palette */
+  --hope-purple: #49338a;
+  --hope-purple-deep: #463080;
+  --hope-purple-dark: #24163f;
+  --hope-obsidian: #0c0618;
+  --hope-obsidian-surface: #130a24;
+
+  --hope-lavender: #8580c8;
+  --hope-lavender-accent: #8582d0;
+  --hope-lavender-light: #b8b3e2;
+  --hope-lavender-soft: #dcd9f4;
+  --hope-lavender-glow: rgba(184, 179, 226, 0.25);
+
+  --hope-white: #ffffff;
+  --hope-soft-white: #f7f5ff;
+  --hope-cream: #faf8f3;
+  --hope-muted: #aba4b9;
+  --hope-muted-dim: #7d778c;
+  --hope-gold: #c9ab6f;
+
+  /* Glassmorphism & Borders */
+  --border-glass: rgba(184, 179, 226, 0.16);
+  --border-glass-bright: rgba(184, 179, 226, 0.32);
+  --glass-card-bg: linear-gradient(
+    155deg,
+    rgba(46, 28, 82, 0.72) 0%,
+    rgba(22, 12, 40, 0.94) 100%
+  );
+  --glass-pedestal-bg: radial-gradient(
+    ellipse at 50% 85%,
+    rgba(133, 128, 200, 0.22) 0%,
+    rgba(45, 27, 78, 0.45) 55%,
+    rgba(18, 9, 32, 0.7) 100%
+  );
+
+  /* Shadows */
+  --shadow-card: 0 16px 45px -8px rgba(5, 2, 12, 0.8),
+                 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 22px 55px -8px rgba(73, 51, 138, 0.4),
+                  0 4px 18px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-sans: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Layout & Geometry */
+  --radius-card: 22px;
+  --radius-pill: 999px;
+  --radius-badge: 6px;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 0.22s var(--ease-spring);
+  --transition-smooth: 0.4s var(--ease-spring);
+}
+
+/* --------------------------------------------------------------------------
+   2. GLOBAL RESETS & FOUNDATION
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background-color: var(--hope-obsidian);
+  color: var(--hope-soft-white);
+  overflow-x: hidden;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--hope-obsidian);
+  min-height: 100vh;
+  min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: env(safe-area-inset-top, 16px) 14px env(safe-area-inset-bottom, 24px);
+}
+
+/* --------------------------------------------------------------------------
+   3. BACKGROUND ATMOSPHERE (NOCTURNAL AMETHYST & PARTICLES)
+   -------------------------------------------------------------------------- */
+.bg-ambient {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+  clip-path: inset(0);
+}
+
+.bg-gradient-top {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: 380px;
+  background: radial-gradient(
+    circle at 50% 30%,
+    rgba(70, 48, 128, 0.58) 0%,
+    rgba(36, 22, 63, 0.32) 50%,
+    transparent 75%
+  );
+  filter: blur(40px);
+  opacity: 0.95;
+}
+
+.bg-gradient-mid {
+  position: absolute;
+  top: 35%;
+  right: -50px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(
+    circle,
+    rgba(133, 128, 200, 0.18) 0%,
+    rgba(36, 22, 63, 0.08) 50%,
+    transparent 70%
+  );
+  filter: blur(45px);
+}
+
+.bg-gradient-bottom {
+  position: absolute;
+  bottom: 0;
+  left: -50px;
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(
+    circle,
+    rgba(73, 51, 138, 0.24) 0%,
+    transparent 70%
+  );
+  filter: blur(55px);
+}
+
+/* Subtle Shimmering Star Dust */
+.star-field {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(1.2px 1.2px at 30px 40px, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1.5px 1.5px at 150px 100px, rgba(184, 179, 226, 0.8), transparent),
+    radial-gradient(1px 1px at 250px 190px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(2px 2px at 330px 80px, rgba(184, 179, 226, 0.85), transparent),
+    radial-gradient(1px 1px at 70px 300px, rgba(255, 255, 255, 0.65), transparent),
+    radial-gradient(1.5px 1.5px at 200px 420px, rgba(184, 179, 226, 0.7), transparent),
+    radial-gradient(1px 1px at 310px 520px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 50px 620px, rgba(184, 179, 226, 0.75), transparent),
+    radial-gradient(1px 1px at 230px 720px, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(2px 2px at 350px 800px, rgba(184, 179, 226, 0.85), transparent);
+  background-size: 380px 840px;
+  opacity: 0.5;
+  animation: starPulse 7s ease-in-out infinite alternate;
+}
+
+@keyframes starPulse {
+  0% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.015); }
+  100% { opacity: 0.45; transform: scale(1); }
+}
+
+/* --------------------------------------------------------------------------
+   4. APP CONTAINER (COMPACT MOBILE FIRST VIEWPORT)
+   -------------------------------------------------------------------------- */
+.bio-wrapper {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  padding-top: 6px;
+  padding-bottom: 28px;
+}
+
+/* --------------------------------------------------------------------------
+   5. HERO COMPACT SECTION
+   -------------------------------------------------------------------------- */
+.hero {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 6px 8px 10px;
+  position: relative;
+}
+
+.logo-container {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.logo-container:hover {
+  transform: scale(1.03);
+}
+
+.logo-aura {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(184, 179, 226, 0.32) 0%, rgba(70, 48, 128, 0.15) 55%, transparent 75%);
+  filter: blur(12px);
+  pointer-events: none;
+  animation: auraGlow 5s ease-in-out infinite alternate;
+}
+
+@keyframes auraGlow {
+  0% { opacity: 0.6; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1.15); }
+}
+
+.logo-svg {
+  position: relative;
+  z-index: 2;
+  width: 76px;
+  height: auto;
+  max-height: 88px;
+  color: var(--hope-lavender-light);
+  filter: drop-shadow(0 4px 12px rgba(184, 179, 226, 0.25));
+  transition: filter var(--transition-fast);
+}
+
+.logo-container:hover .logo-svg {
+  filter: drop-shadow(0 6px 18px rgba(184, 179, 226, 0.42));
+}
+
+.brand-name {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hope-soft-white);
+  line-height: 1.15;
+  margin-bottom: 4px;
+}
+
+.brand-tagline {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--hope-lavender-light);
+  line-height: 1.4;
+  max-width: 310px;
+  margin: 0 auto;
+}
+
+.brand-philosophy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(184, 179, 226, 0.1);
+  border: 1px solid rgba(184, 179, 226, 0.22);
+  font-family: var(--font-serif);
+  font-size: 0.92rem;
+  font-weight: 500;
+  font-style: italic;
+  color: #ebe7ff;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  max-width: 96%;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.brand-philosophy svg {
+  width: 11px;
+  height: 11px;
+  color: var(--hope-gold);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   6. EDITORIAL CARD SHELL
+   -------------------------------------------------------------------------- */
+.editorial-card {
+  width: 100%;
+  position: relative;
+  background: var(--glass-card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: visible; /* Intentionally visible for 3D break out */
+  transition: transform var(--transition-smooth),
+              box-shadow var(--transition-smooth),
+              border-color var(--transition-smooth);
+}
+
+.editorial-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  border-radius: var(--radius-card);
+}
+
+/* --- CONTORNO ANIMADO COM EFEITO DE FEIXE LÚMICO (CARDS EDITORIAIS) --- */
+.card-border-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 4;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  -webkit-mask-composite: destination-out;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  opacity: 0.88;
+  transition: opacity var(--transition-smooth);
+}
+
+.card-border-glow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 300%;
+  padding-bottom: 300%;
+  transform: translate(-50%, -50%) rotate(0deg);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 45deg,
+    rgba(168, 85, 247, 0.35) 75deg,
+    rgba(196, 181, 253, 0.85) 105deg,
+    rgba(255, 216, 138, 1) 130deg,
+    rgba(196, 181, 253, 0.85) 155deg,
+    rgba(168, 85, 247, 0.35) 185deg,
+    transparent 220deg,
+    transparent 360deg
+  );
+  animation: cardBorderBeamRotate 6.5s linear infinite;
+  will-change: transform;
+}
+
+/* Efeito interativo ao passar o cursor ou tocar (Mobile & Desktop) */
+.card-border-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    140px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 220, 140, 0.85) 0%,
+    rgba(168, 85, 247, 0.45) 45%,
+    transparent 80%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.editorial-card:hover .card-border-glow,
+.editorial-card:active .card-border-glow,
+.editorial-card.is-touch-active .card-border-glow {
+  opacity: 1;
+}
+
+.editorial-card:hover .card-border-glow::after,
+.editorial-card:active .card-border-glow::after,
+.editorial-card.is-touch-active .card-border-glow::after {
+  opacity: 1;
+}
+
+.editorial-card:hover,
+.editorial-card:active,
+.editorial-card.is-touch-active {
+  box-shadow: 0 20px 48px -8px rgba(8, 3, 18, 0.9),
+              0 0 28px rgba(168, 85, 247, 0.32),
+              0 0 14px rgba(255, 216, 138, 0.2);
+}
+
+/* Card WhatsApp: Feixe Esmeralda & Champanhe */
+.contact-card .card-border-glow::before {
+  animation-delay: -2.3s;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 45deg,
+    rgba(37, 211, 102, 0.35) 75deg,
+    rgba(74, 222, 128, 0.85) 105deg,
+    rgba(255, 225, 140, 1) 130deg,
+    rgba(74, 222, 128, 0.85) 155deg,
+    rgba(37, 211, 102, 0.35) 185deg,
+    transparent 220deg,
+    transparent 360deg
+  );
+}
+
+.contact-card:hover,
+.contact-card:active,
+.contact-card.is-touch-active {
+  box-shadow: 0 20px 48px -8px rgba(8, 3, 18, 0.9),
+              0 0 28px rgba(37, 211, 102, 0.35),
+              0 0 14px rgba(255, 225, 140, 0.22);
+}
+
+/* Card Instagram: Feixe Sunset Rose, Ouro & Violeta */
+.instagram-card .card-border-glow::before {
+  animation-delay: -4.6s;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 45deg,
+    rgba(236, 72, 153, 0.35) 75deg,
+    rgba(244, 114, 182, 0.9) 105deg,
+    rgba(255, 216, 138, 1) 130deg,
+    rgba(168, 85, 247, 0.85) 155deg,
+    rgba(236, 72, 153, 0.35) 185deg,
+    transparent 220deg,
+    transparent 360deg
+  );
+}
+
+.instagram-card:hover,
+.instagram-card:active,
+.instagram-card.is-touch-active {
+  box-shadow: 0 20px 48px -8px rgba(8, 3, 18, 0.9),
+              0 0 28px rgba(236, 72, 153, 0.35),
+              0 0 14px rgba(255, 216, 138, 0.22);
+}
+
+/* --- CONTORNO ANIMADO NOS PEDESTAIS DA MINI VITRINE --- */
+.pedestal-border-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  -webkit-mask-composite: destination-out;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  opacity: 0.9;
+  transition: opacity var(--transition-smooth);
+}
+
+.pedestal-border-glow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 300%;
+  padding-bottom: 300%;
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: pedestalBorderRotate 5.5s linear infinite;
+  will-change: transform;
+}
+
+/* Peça 1: Ametista (Feixe Ametista & Ouro) */
+.pedestal-border-glow.amethyst-glow::before {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 50deg,
+    rgba(168, 85, 247, 0.4) 85deg,
+    rgba(216, 180, 254, 0.85) 115deg,
+    rgba(255, 216, 138, 1) 140deg,
+    rgba(168, 85, 247, 0.6) 165deg,
+    transparent 200deg,
+    transparent 360deg
+  );
+}
+
+/* Peça 2: Drusa Branca (Feixe Diamante Cristal & Lilás) */
+.pedestal-border-glow.quartz-glow::before {
+  animation-delay: -2.75s; /* Defasagem harmônica para movimento orgânico */
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 50deg,
+    rgba(147, 197, 253, 0.45) 85deg,
+    rgba(255, 255, 255, 1) 120deg,
+    rgba(216, 180, 254, 0.9) 145deg,
+    rgba(168, 85, 247, 0.5) 170deg,
+    transparent 205deg,
+    transparent 360deg
+  );
+}
+
+/* Efeito de spotlight interativo no pedestal ao mover o cursor ou tocar */
+.pedestal-border-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    110px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 220, 140, 0.85) 0%,
+    rgba(168, 85, 247, 0.5) 45%,
+    transparent 80%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.product-3d-item:hover .pedestal-border-glow,
+.product-3d-item:active .pedestal-border-glow,
+.product-3d-item.is-touch-active .pedestal-border-glow {
+  opacity: 1;
+}
+
+.product-3d-item:hover .pedestal-border-glow::after,
+.product-3d-item:active .pedestal-border-glow::after,
+.product-3d-item.is-touch-active .pedestal-border-glow::after {
+  opacity: 1;
+}
+
+.product-3d-item:hover .pedestal-base,
+.product-3d-item:active .pedestal-base,
+.product-3d-item.is-touch-active .pedestal-base {
+  border-color: rgba(184, 179, 226, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25),
+              0 14px 32px -4px rgba(73, 51, 138, 0.45),
+              0 0 22px rgba(168, 85, 247, 0.35);
+}
+
+@keyframes cardBorderBeamRotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes pedestalBorderRotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-border-glow::before,
+  .pedestal-border-glow::before {
+    animation: none !important;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. MAIN STORE CARD (MINI VITRINE DIGITAL & 3D FLOATING PRODUCTS)
+   -------------------------------------------------------------------------- */
+.store-card {
+  padding: 22px 16px 20px;
+  background: linear-gradient(
+    160deg,
+    rgba(54, 34, 96, 0.75) 0%,
+    rgba(24, 13, 44, 0.95) 100%
+  );
+  border: 1px solid rgba(184, 179, 226, 0.24);
+  box-shadow: 0 18px 45px -8px rgba(8, 3, 18, 0.85),
+              0 0 30px rgba(133, 128, 200, 0.1);
+}
+
+.store-card-header {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  margin-bottom: 46px; /* Strategic breathing room so 3D crystals never overlap title! */
+}
+
+.card-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hope-lavender-light);
+  margin-bottom: 3px;
+}
+
+.card-eyebrow svg {
+  width: 9px;
+  height: 9px;
+  color: var(--hope-gold);
+}
+
+.card-title-serif {
+  font-family: var(--font-serif);
+  font-size: 1.65rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hope-soft-white);
+  line-height: 1.15;
+  margin-bottom: 4px;
+}
+
+.card-subtext {
+  font-family: var(--font-sans);
+  font-size: 0.78125rem;
+  font-weight: 300;
+  color: var(--hope-muted);
+  line-height: 1.35;
+}
+
+/* --- THE 3D VITRINE SHOWCASE STAGE --- */
+.showcase-stage {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 20px;
+  perspective: 900px;
+  overflow: visible;
+}
+
+/* Individual 3D Product Item */
+.product-3d-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  perspective: 900px;
+  transform-style: preserve-3d;
+}
+
+/* The Pedestal surface inside the card */
+.pedestal-base {
+  width: 100%;
+  height: 140px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--glass-pedestal-bg);
+  border: 1px solid rgba(184, 179, 226, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+              0 8px 20px rgba(0, 0, 0, 0.35);
+  overflow: visible; /* Allows the floating crystal to pop out */
+  transition: transform var(--transition-smooth),
+              box-shadow var(--transition-smooth),
+              border-color var(--transition-smooth);
+}
+
+/* Ground shadow under the crystal on the pedestal */
+.pedestal-shadow {
+  position: absolute;
+  bottom: 8px;
+  width: 72%;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(10, 5, 20, 0.45) 55%,
+    transparent 80%
+  );
+  filter: blur(4px);
+  z-index: 2;
+  transition: transform var(--transition-smooth), opacity var(--transition-smooth);
+}
+
+/* Product Tag Pill */
+.product-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: var(--radius-badge);
+  font-family: var(--font-sans);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hope-soft-white);
+  background: rgba(30, 18, 54, 0.85);
+  border: 1px solid rgba(184, 179, 226, 0.24);
+  backdrop-filter: blur(8px);
+}
+
+.product-badge.gold {
+  color: #ffd88a;
+  border-color: rgba(201, 171, 111, 0.45);
+  background: rgba(40, 26, 16, 0.88);
+}
+
+/* THE FLOATING CRYSTAL ELEMENT — Overlaps pedestal boundary with 3D elevation */
+.floating-crystal {
+  position: absolute;
+  bottom: 12px;
+  z-index: 15;
+  width: 95%;
+  height: 140px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  transform-origin: center bottom;
+  transform: translateY(-12px) scale(1.04) rotate(-1deg);
+  transition: transform var(--transition-smooth), filter var(--transition-smooth);
+  animation: crystalLevitate1 4.5s ease-in-out infinite alternate;
+}
+
+.product-3d-item:nth-child(2) .floating-crystal {
+  transform: translateY(-12px) scale(0.96) rotate(1.5deg);
+  animation: crystalLevitate2 5s ease-in-out infinite alternate;
+  animation-delay: -2s;
+}
+
+/* Picture and image constraints */
+.floating-crystal picture {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.crystal-img {
+  max-width: 100%;
+  max-height: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.75))
+          drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45))
+          drop-shadow(0 0 14px rgba(184, 179, 226, 0.16));
+  transition: filter var(--transition-smooth);
+}
+
+/* Continuous Organic Levitation */
+@keyframes crystalLevitate1 {
+  0% {
+    transform: translateY(-10px) scale(1.04) rotate(-1deg);
+  }
+  100% {
+    transform: translateY(-18px) scale(1.06) rotate(-0.2deg);
+  }
+}
+
+@keyframes crystalLevitate2 {
+  0% {
+    transform: translateY(-10px) scale(0.96) rotate(1.5deg);
+  }
+  100% {
+    transform: translateY(-18px) scale(0.98) rotate(2.2deg);
+  }
+}
+
+/* Product Info below the pedestal */
+.product-info-block {
+  width: 100%;
+  text-align: center;
+  padding-top: 9px;
+}
+
+.product-category {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hope-lavender);
+  margin-bottom: 2px;
+}
+
+.product-name {
+  font-family: var(--font-serif);
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--hope-soft-white);
+  line-height: 1.25;
+  margin-bottom: 3px;
+}
+
+.product-price {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--hope-soft-white);
+  display: inline-block;
+}
+
+/* Desktop Hover & Mobile Touch Interactions */
+.product-3d-item:hover .pedestal-base,
+.product-3d-item:active .pedestal-base,
+.product-3d-item.is-touch-active .pedestal-base {
+  transform: translateY(-3px);
+  border-color: rgba(184, 179, 226, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25),
+              0 14px 30px -4px rgba(73, 51, 138, 0.35);
+}
+
+.product-3d-item:hover .floating-crystal,
+.product-3d-item:active .floating-crystal,
+.product-3d-item.is-touch-active .floating-crystal {
+  transform: translateY(-24px) scale(1.06) rotate(0deg) !important;
+  filter: drop-shadow(0 22px 26px rgba(0, 0, 0, 0.88))
+          drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5))
+          drop-shadow(0 0 22px rgba(184, 179, 226, 0.45));
+}
+
+.product-3d-item:hover .pedestal-shadow,
+.product-3d-item:active .pedestal-shadow,
+.product-3d-item.is-touch-active .pedestal-shadow {
+  transform: scale(0.82);
+  opacity: 0.45;
+}
+
+.product-3d-item:hover .product-name,
+.product-3d-item:active .product-name,
+.product-3d-item.is-touch-active .product-name {
+  color: var(--hope-lavender-light);
+}
+
+/* CTA BUTTON PRINCIPAL */
+.btn-cta-primary {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    135deg,
+    #6142b3 0%,
+    #463080 60%,
+    #311f5c 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--hope-white);
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(70, 48, 128, 0.42),
+              inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: all var(--transition-fast);
+  overflow: hidden;
+}
+
+.btn-cta-primary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: left 0.7s var(--ease-spring);
+}
+
+.btn-cta-primary:hover::before {
+  left: 120%;
+}
+
+.btn-cta-primary:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(
+    135deg,
+    #6e4bc9 0%,
+    #4e3691 60%,
+    #382468 100%
+  );
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 12px 28px rgba(85, 58, 158, 0.5),
+              0 0 18px rgba(184, 179, 226, 0.28);
+}
+
+.btn-cta-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 14px rgba(70, 48, 128, 0.4);
+}
+
+.btn-cta-primary svg {
+  width: 15px;
+  height: 15px;
+  transition: transform var(--transition-fast);
+}
+
+.btn-cta-primary:hover svg {
+  transform: translateX(4px);
+}
+
+/* --------------------------------------------------------------------------
+   8. CARDS EDITORIAIS: WHATSAPP & INSTAGRAM
+   -------------------------------------------------------------------------- */
+.contact-card, .instagram-card {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.contact-card:hover, .instagram-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(184, 179, 226, 0.35);
+  box-shadow: var(--shadow-hover);
+}
+
+.contact-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.icon-glyph-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(70, 48, 128, 0.45) 0%,
+    rgba(36, 22, 63, 0.75) 100%
+  );
+  border: 1px solid rgba(184, 179, 226, 0.22);
+  color: var(--hope-lavender-light);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+              0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all var(--transition-fast);
+}
+
+.icon-glyph-box svg {
+  width: 20px;
+  height: 20px;
+}
+
+.contact-card:hover .icon-glyph-box,
+.instagram-card:hover .icon-glyph-box {
+  color: var(--hope-white);
+  border-color: rgba(184, 179, 226, 0.45);
+  box-shadow: 0 0 16px rgba(133, 128, 200, 0.35);
+}
+
+.contact-texts {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.contact-title {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hope-soft-white);
+  line-height: 1.15;
+}
+
+.contact-desc {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 300;
+  color: var(--hope-muted);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+/* Action button row spanning elegantly across the editorial card */
+.contact-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(184, 179, 226, 0.08);
+  border: 1px solid rgba(184, 179, 226, 0.22);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hope-lavender-light);
+  transition: all var(--transition-fast);
+}
+
+.contact-card:hover .contact-action-btn,
+.instagram-card:hover .contact-action-btn {
+  background: rgba(184, 179, 226, 0.18);
+  color: var(--hope-white);
+  border-color: rgba(184, 179, 226, 0.45);
+  transform: translateY(-1px);
+}
+
+.contact-action-btn svg {
+  width: 13px;
+  height: 13px;
+  transition: transform var(--transition-fast);
+}
+
+.contact-card:hover .contact-action-btn svg,
+.instagram-card:hover .contact-action-btn svg {
+  transform: translateX(3px);
+}
+
+/* --------------------------------------------------------------------------
+   9. RODAPÉ (FOOTER)
+   -------------------------------------------------------------------------- */
+.footer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 10px 8px;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.footer-crystal-symbol {
+  width: 20px;
+  height: 20px;
+  color: var(--hope-lavender);
+  opacity: 0.65;
+  margin-bottom: 2px;
+}
+
+.footer-brand {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hope-soft-white);
+}
+
+.footer-meta {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hope-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-meta span {
+  color: var(--hope-lavender);
+}
+
+.footer-meta a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.footer-meta a:hover {
+  color: var(--hope-lavender-light);
+}
+
+/* --------------------------------------------------------------------------
+   10. ACCESSIBILITY & FOCUS STATES
+   -------------------------------------------------------------------------- */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--hope-lavender-light);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   11. RESPONSIVENESS (360px, 375px, 390px, 414px, 430px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 390px) {
+  .product-name {
+    font-size: 0.86rem;
+  }
+  .product-price {
+    font-size: 0.82rem;
+  }
+  .product-category {
+    font-size: 0.58rem;
+  }
+}
+
+@media (max-width: 365px) {
+  body {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .brand-name {
+    font-size: 1.35rem;
+  }
+
+  .card-title-serif {
+    font-size: 1.4rem;
+  }
+
+  .showcase-stage {
+    gap: 8px;
+  }
+
+  .pedestal-base {
+    height: 125px;
+  }
+
+  .floating-crystal {
+    height: 130px;
+  }
+
+  .product-name {
+    font-size: 0.78rem;
+  }
+
+  .product-price {
+    font-size: 0.76rem;
+  }
+
+  .contact-card, .instagram-card {
+    padding: 13px 12px;
+    gap: 8px;
+  }
+
+  .icon-glyph-box {
+    width: 38px;
+    height: 38px;
+  }
+
+  .contact-title {
+    font-size: 1.05rem;
+  }
+
+  .contact-action-btn {
+    padding: 8px 12px;
+    font-size: 0.68rem;
+  }
+
+  .btn-cta-primary {
+    padding: 13px 16px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (min-width: 768px) {
+  body {
+    padding-top: 36px;
+    padding-bottom: 50px;
+  }
+}
