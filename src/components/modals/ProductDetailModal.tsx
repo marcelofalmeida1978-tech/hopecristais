@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Minus, ShoppingBag, ShieldCheck, Sparkles, ArrowLeft } from 'lucide-react';
 import { Product } from '../../types';
 import { useCart } from '../../context/CartContext';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -150,8 +151,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 }}
               >
                 <img
-                  src={product.image}
+                  src={product.image || getFallbackImage(product.category)}
                   alt={product.name}
+                  onError={(e) => handleImageError(e, product.category)}
                   style={{
                     width: '100%',
                     height: '100%',

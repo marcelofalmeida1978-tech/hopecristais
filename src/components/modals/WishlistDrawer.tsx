@@ -5,6 +5,7 @@ import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 import { useProducts } from '../../context/ProductContext';
 import { Product } from '../../types';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 
 interface WishlistDrawerProps {
   onOpenDetail: (product: Product) => void;
@@ -175,8 +176,9 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({ onOpenDetail }) 
                     }}
                   >
                     <img
-                      src={product.image}
+                      src={product.image || getFallbackImage(product.category)}
                       alt={product.name}
+                      onError={(e) => handleImageError(e, product.category)}
                       style={{
                         width: '70px',
                         height: '84px',

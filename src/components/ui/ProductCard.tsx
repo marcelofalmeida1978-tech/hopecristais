@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ShoppingBag, Eye } from 'lucide-react';
 import { Product } from '../../types';
 import { useCart } from '../../context/CartContext';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 
 interface ProductCardProps {
   product: Product;
@@ -55,9 +56,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         onClick={() => onOpenDetail(product)}
       >
         <img
-          src={product.image}
+          src={product.image || getFallbackImage(product.category)}
           alt={product.name}
           loading="lazy"
+          onError={(e) => handleImageError(e, product.category)}
           style={{
             width: '100%',
             height: '100%',

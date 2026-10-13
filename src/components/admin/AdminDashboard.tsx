@@ -3,6 +3,7 @@ import { useProducts } from '../../context/ProductContext';
 import { Product } from '../../types';
 import { Logo } from '../ui/Logo';
 import { compressImage } from '../../utils/imageCompressor';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 import {
   Plus,
   Upload,
@@ -250,6 +251,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
         dimensions: formDimensions.trim() || undefined,
         weight: formWeight.trim() || undefined,
         image: formImage.trim(),
+        images: [formImage.trim()],
         inStock: isAvailable,
         quantity: parsedQuantity
       });
@@ -906,14 +908,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                             }}
                           >
                             <img
-                              src={p.image}
+                              src={p.image || getFallbackImage(p.category)}
                               alt={p.name}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={(e) => {
-                                // fallback placeholder
-                                (e.target as HTMLImageElement).src =
-                                  'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80';
-                              }}
+                              onError={(e) => handleImageError(e, p.category)}
                             />
                           </div>
                         </td>
@@ -1269,13 +1267,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                         }}
                       >
                         <img
-                          src={formImage}
+                          src={formImage || getFallbackImage(formCategory)}
                           alt="Preview"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80';
-                          }}
+                          onError={(e) => handleImageError(e, formCategory)}
                         />
                       </div>
                       <div>

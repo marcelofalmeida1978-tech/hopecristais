@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -200,8 +201,9 @@ export const CartDrawer: React.FC = () => {
                       }}
                     >
                       <img
-                        src={item.product.image}
+                        src={item.product.image || getFallbackImage(item.product.category)}
                         alt={item.product.name}
+                        onError={(e) => handleImageError(e, item.product.category)}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     </div>

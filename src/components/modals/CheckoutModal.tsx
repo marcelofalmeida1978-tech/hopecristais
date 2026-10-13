@@ -23,6 +23,7 @@ import { ShippingCalculator } from '../checkout/ShippingCalculator';
 import { PaymentResult } from '../../lib/mercadopago';
 import { HopeOrder, saveOrder } from '../../services/paymentService';
 import { ShippingOption, ShippingAddress } from '../../types';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 import confetti from 'canvas-confetti';
 
 export const CheckoutModal: React.FC = () => {
@@ -990,13 +991,12 @@ export const CheckoutModal: React.FC = () => {
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {item.product.image && (
-                              <img
-                                src={item.product.image}
-                                alt={item.product.name}
-                                style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
-                              />
-                            )}
+                            <img
+                              src={item.product.image || getFallbackImage(item.product.category)}
+                              alt={item.product.name}
+                              onError={(e) => handleImageError(e, item.product.category)}
+                              style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
+                            />
                             <div>
                               <span style={{ fontWeight: 500, display: 'block', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {item.product.name}

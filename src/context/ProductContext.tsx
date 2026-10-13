@@ -8,6 +8,7 @@ import {
 } from '../lib/supabase';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { saveCatalogToIDB, loadCatalogFromIDB } from '../utils/indexedDbCache';
+import { getFallbackImage } from '../utils/imageFallback';
 
 const STORAGE_KEY = 'hope_cristais_catalog_v2';
 const CATEGORIES_STORAGE_KEY = 'hope_cristais_categories_v2';
@@ -80,27 +81,33 @@ function toProduct(row: any): Product {
     ? row.keywords.filter((k: string) => typeof k === 'string' && !k.startsWith('__stock_qty:'))
     : [];
 
-  // Garantir URLs otimizadas de imagens leves (evita sobrecarga de base64 no app)
-  let productImg = row.image;
-  if (productImg && typeof productImg === 'string' && productImg.startsWith('data:image/')) {
-    const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === row.id);
-    if (initialMatch && initialMatch.image && !initialMatch.image.startsWith('data:')) {
-      productImg = initialMatch.image;
-    } else {
-      productImg = `/products/${row.id}.jpg`;
-    }
+  // Tratar imagem do produto com segurança:
+  // 1. Se for produto do catálogo inicial com foto física em disco (/products/... ou /assets/...), preserva.
+  // 2. Se for foto enviada pelo usuário (data:image/ ou URL externa), PRESERVA os dados reais da foto.
+  // 3. Se estiver vazia ou for um caminho /products/... que não existe nos produtos iniciais, usa fallback elegante da categoria.
+  let productImg = row.image || '';
+  const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === row.id);
+
+  if (initialMatch && initialMatch.image && !initialMatch.image.startsWith('data:')) {
+    productImg = initialMatch.image;
+  } else if (!productImg || (typeof productImg === 'string' && productImg.startsWith('/products/') && !initialMatch)) {
+    productImg = getFallbackImage(row.category);
   }
 
   let productImages: string[] = [];
   if (Array.isArray(row.images) && row.images.length > 0) {
     productImages = row.images.map((img: string, idx: number) => {
-      if (img && typeof img === 'string' && img.startsWith('data:image/')) {
-        return idx === 0 ? productImg : `/products/${row.id}_${idx}.jpg`;
+      if (initialMatch && initialMatch.images && initialMatch.images[idx] && !initialMatch.images[idx].startsWith('data:')) {
+        return initialMatch.images[idx];
+      }
+      if (idx === 0) return productImg;
+      if (!img || (typeof img === 'string' && img.startsWith('/products/') && !initialMatch)) {
+        return getFallbackImage(row.category);
       }
       return img;
     });
   } else {
-    productImages = [productImg];
+    productImages = productImg ? [productImg] : [getFallbackImage(row.category)];
   }
 
   return {
@@ -214,8 +221,8 @@ const safeToggleStock = async (client: SupabaseClient, id: string, inStock: bool
 };
 
 const safeBatchUpsertProducts = async (client: SupabaseClient, productsList: Product[]) => {
-  // Upsert em lotes de 20 para evitar limites de payload com imagens base64
-  const batchSize = 20;
+  // Upsert em lotes de 10 para evitar limites de payload com imagens base64
+  const batchSize = 10;
   for (let i = 0; i < productsList.length; i += batchSize) {
     const chunk = productsList.slice(i, i + batchSize);
     const chunkRows = chunk.map((p) => toRow(p, true));
@@ -434,24 +441,17 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     try {
       if (hasLoadedSupabase || products.length >= INITIAL_PRODUCTS.length) {
-        const sanitized = products.map((p) => {
-          if (p.image && p.image.startsWith('data:image/')) {
-            const staticImg = `/products/${p.id}.jpg`;
-            return {
-              ...p,
-              image: staticImg,
-              images: (p.images || []).map((img, i) =>
-                img.startsWith('data:') ? (i === 0 ? staticImg : `/products/${p.id}_${i}.jpg`) : img
-              )
-            };
-          }
-          return p;
-        });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
-        saveCatalogToIDB(sanitized).catch(() => {});
+        // O IndexedDB não possui limite rígido de 5MB e preserva fotos completas
+        saveCatalogToIDB(products).catch(() => {});
+
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+        } catch {
+          // Em caso de estouro de quota no localStorage (5MB no mobile com fotos), o IndexedDB já garantiu a persistência
+        }
       }
     } catch (e) {
-      console.warn('Aviso ao salvar no localStorage, persistindo no IndexedDB:', e);
+      console.warn('Aviso ao persistir produtos localmente:', e);
       saveCatalogToIDB(products).catch(() => {});
     }
   }, [products, hasLoadedSupabase]);
@@ -793,15 +793,20 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const { products: freshProducts, categories: freshCats } = await fetchAllProductsFromSupabase(activeSupabaseClient, 500);
 
         if (freshProducts && freshProducts.length > 0) {
-          // Assegura a preservação de quantidades definidas no painel localmente
+          // Assegura a preservação de quantidades e imagens definidas no painel localmente
           const mergedProducts = freshProducts.map((fp) => {
             const local = products.find((lp) => lp.id === fp.id);
-            if (local && local.quantity !== undefined && (fp.quantity === undefined || (fp.quantity <= 1 && local.quantity > 1))) {
-              return {
-                ...fp,
-                quantity: local.quantity,
-                inStock: local.quantity > 0 && local.inStock !== false
-              };
+            if (local) {
+              const res = { ...fp };
+              if (local.quantity !== undefined && (fp.quantity === undefined || (fp.quantity <= 1 && local.quantity > 1))) {
+                res.quantity = local.quantity;
+                res.inStock = local.quantity > 0 && local.inStock !== false;
+              }
+              if (local.image && (!fp.image || fp.image === '')) {
+                res.image = local.image;
+                res.images = local.images || [local.image];
+              }
+              return res;
             }
             return fp;
           });
@@ -813,15 +818,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const mergedCats = Array.from(new Set([...categories, ...freshCats, 'Diversos']));
           setCategories(mergedCats);
 
+          saveCatalogToIDB(mergedProducts).catch(() => {});
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedProducts));
             localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(mergedCats));
-            // Sincronizar abas do navegador e componentes da vitrine online
-            window.dispatchEvent(new Event('storage'));
-            window.dispatchEvent(new CustomEvent('hope_catalog_updated'));
-          } catch (e) {
-            console.warn('Erro ao atualizar localStorage após puxar produtos:', e);
-          }
+          } catch {}
+          // Sincronizar abas do navegador e componentes da vitrine online
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('hope_catalog_updated'));
         }
       } catch (err) {
         console.warn('Erro ao sincronizar com Supabase:', err);

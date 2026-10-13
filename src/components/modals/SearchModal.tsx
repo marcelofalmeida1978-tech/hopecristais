@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, ArrowRight, Sparkles } from 'lucide-react';
 import { useProducts } from '../../context/ProductContext';
 import { Product } from '../../types';
+import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -212,8 +213,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                     className="search-item"
                   >
                     <img
-                      src={product.image}
+                      src={product.image || getFallbackImage(product.category)}
                       alt={product.name}
+                      onError={(e) => handleImageError(e, product.category)}
                       style={{
                         width: '52px',
                         height: '62px',
