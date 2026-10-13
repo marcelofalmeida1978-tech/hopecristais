@@ -51,6 +51,93 @@ interface ProductContextType {
   triggerDeploy: () => Promise<{ success: boolean; message: string }>;
 }
 
+/**
+ * Resolve com rigor a imagem do produto vindo do Supabase ou cadastro local:
+ * - Suporta `row.image`, `row.image_url`, `row.imageUrl`, `row.picture`, `row.photo`
+ * - Preserva URLs remotas (http/https) e fotos em base64 (data:image/)
+ * - Mapeia nomes de arquivos puros (ex: "cristal.jpg") para "/products/cristal.jpg"
+ * - Se vier sem imagem mas tiver ID correspondente aos produtos físicos originais, preserva a foto física
+ * - Se vier apenas com ID/slug, monta o caminho "/products/${id}.jpg"
+ * - NUNCA aplica array de fotos de teste baseado em índices nem troca por fotos de outros produtos
+ */
+export function resolveProductImage(row: any): string {
+  if (!row) return getFallbackImage();
+
+  let candidate =
+    row.image ||
+    row.image_url ||
+    row.imageUrl ||
+    row.picture ||
+    row.photo ||
+    (Array.isArray(row.images) && row.images.length > 0 ? row.images[0] : '') ||
+    '';
+
+  if (typeof candidate === 'string') {
+    candidate = candidate.trim();
+  } else {
+    candidate = '';
+  }
+
+  // 1. Se for base64 ou link remoto absoluto
+  if (
+    candidate.startsWith('data:image/') ||
+    candidate.startsWith('http://') ||
+    candidate.startsWith('https://')
+  ) {
+    return candidate;
+  }
+
+  // 2. Se for caminho relativo na raiz (/products/... ou /assets/...)
+  if (candidate.startsWith('/')) {
+    return candidate;
+  }
+
+  // 3. Se for nome de arquivo sem barra (ex: "cristal.jpg")
+  if (candidate) {
+    return `/products/${candidate}`;
+  }
+
+  // 4. Se o campo de imagem veio vazio, tentar mapear pelo ID do produto
+  if (row.id) {
+    const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === row.id);
+    if (initialMatch && initialMatch.image) {
+      return initialMatch.image;
+    }
+    return `/products/${row.id}.jpg`;
+  }
+
+  return getFallbackImage(row.category);
+}
+
+export function resolveProductImages(row: any, primaryImage: string): string[] {
+  let imagesList: string[] = [];
+
+  if (Array.isArray(row.images) && row.images.length > 0) {
+    imagesList = row.images
+      .map((img: any, idx: number) => {
+        if (idx === 0) return primaryImage;
+        if (!img || typeof img !== 'string') return '';
+        const trimmed = img.trim();
+        if (
+          trimmed.startsWith('data:image/') ||
+          trimmed.startsWith('http://') ||
+          trimmed.startsWith('https://') ||
+          trimmed.startsWith('/')
+        ) {
+          return trimmed;
+        }
+        return `/products/${trimmed}`;
+      })
+      .filter(Boolean);
+  }
+
+  if (imagesList.length === 0 || imagesList[0] !== primaryImage) {
+    imagesList = primaryImage ? [primaryImage] : [getFallbackImage(row?.category)];
+  }
+
+  return imagesList;
+}
+
 // Utilitário para converter registro do Supabase para formato Product do app
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toProduct(row: any): Product {
@@ -82,34 +169,9 @@ function toProduct(row: any): Product {
     ? row.keywords.filter((k: string) => typeof k === 'string' && !k.startsWith('__stock_qty:'))
     : [];
 
-  // Tratar imagem do produto com segurança:
-  // 1. Se for produto do catálogo inicial com foto física em disco (/products/... ou /assets/...), preserva.
-  // 2. Se for foto enviada pelo usuário (data:image/ ou URL externa), PRESERVA os dados reais da foto.
-  // 3. Se estiver vazia ou for um caminho /products/... que não existe nos produtos iniciais, usa fallback elegante da categoria.
-  let productImg = row.image || '';
-  const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === row.id);
-
-  if (initialMatch && initialMatch.image && !initialMatch.image.startsWith('data:')) {
-    productImg = initialMatch.image;
-  } else if (!productImg || (typeof productImg === 'string' && productImg.startsWith('/products/') && !initialMatch)) {
-    productImg = getFallbackImage(row.category);
-  }
-
-  let productImages: string[] = [];
-  if (Array.isArray(row.images) && row.images.length > 0) {
-    productImages = row.images.map((img: string, idx: number) => {
-      if (initialMatch && initialMatch.images && initialMatch.images[idx] && !initialMatch.images[idx].startsWith('data:')) {
-        return initialMatch.images[idx];
-      }
-      if (idx === 0) return productImg;
-      if (!img || (typeof img === 'string' && img.startsWith('/products/') && !initialMatch)) {
-        return getFallbackImage(row.category);
-      }
-      return img;
-    });
-  } else {
-    productImages = productImg ? [productImg] : [getFallbackImage(row.category)];
-  }
+  // Mapeamento estrito da imagem específica desta peça (sem substituições por fotos alheias)
+  const productImg = resolveProductImage(row);
+  const productImages = resolveProductImages(row, productImg);
 
   return {
     id: row.id,
@@ -149,6 +211,31 @@ function toRow(p: Product, includeQuantity: boolean = true): Record<string, any>
     : [];
   filteredKeywords.push(`__stock_qty:${parsedQty}`);
 
+  let normalizedImage = (p.image || '').trim();
+  if (
+    normalizedImage &&
+    !normalizedImage.startsWith('http://') &&
+    !normalizedImage.startsWith('https://') &&
+    !normalizedImage.startsWith('data:image/') &&
+    !normalizedImage.startsWith('/')
+  ) {
+    normalizedImage = `/products/${normalizedImage}`;
+  }
+
+  const normalizedImages = (p.images && p.images.length > 0 ? p.images : [normalizedImage]).map((img) => {
+    const trimmed = (img || '').trim();
+    if (
+      trimmed &&
+      !trimmed.startsWith('http://') &&
+      !trimmed.startsWith('https://') &&
+      !trimmed.startsWith('data:image/') &&
+      !trimmed.startsWith('/')
+    ) {
+      return `/products/${trimmed}`;
+    }
+    return trimmed;
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row: Record<string, any> = {
     id: p.id,
@@ -156,8 +243,8 @@ function toRow(p: Product, includeQuantity: boolean = true): Record<string, any>
     category: p.category === 'Outros' ? 'Diversos' : p.category,
     price: p.price,
     price_formatted: p.priceFormatted,
-    image: p.image,
-    images: p.images || [p.image],
+    image: normalizedImage,
+    images: normalizedImages,
     description: p.description || '',
     short_description: p.shortDescription || '',
     dimensions: p.dimensions || null,
@@ -222,8 +309,8 @@ const safeToggleStock = async (client: SupabaseClient, id: string, inStock: bool
 };
 
 const safeBatchUpsertProducts = async (client: SupabaseClient, productsList: Product[]) => {
-  // Upsert em lotes de 10 para evitar limites de payload com imagens base64
-  const batchSize = 10;
+  // Upsert em lotes pequenos (5) para evitar limites de payload com imagens ricas e base64
+  const batchSize = 5;
   for (let i = 0; i < productsList.length; i += batchSize) {
     const chunk = productsList.slice(i, i + batchSize);
     const chunkRows = chunk.map((p) => toRow(p, true));
@@ -803,9 +890,13 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 res.quantity = local.quantity;
                 res.inStock = local.quantity > 0 && local.inStock !== false;
               }
-              if (local.image && (!fp.image || fp.image === '')) {
-                res.image = local.image;
-                res.images = local.images || [local.image];
+              if (local.image) {
+                const isLocalRich = local.image.startsWith('data:image/') || local.image.startsWith('http');
+                const isFpRich = fp.image && (fp.image.startsWith('data:image/') || fp.image.startsWith('http'));
+                if (isLocalRich || !fp.image || (!isFpRich && local.image !== fp.image)) {
+                  res.image = local.image;
+                  res.images = local.images && local.images.length > 0 ? local.images : [local.image];
+                }
               }
               return res;
             }

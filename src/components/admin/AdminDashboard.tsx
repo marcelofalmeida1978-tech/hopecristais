@@ -240,6 +240,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
 
     const formattedPriceStr = `R$ ${parsedPrice.toFixed(2).replace('.', ',')}`;
 
+    let finalImage = formImage.trim();
+    if (
+      finalImage &&
+      !finalImage.startsWith('http://') &&
+      !finalImage.startsWith('https://') &&
+      !finalImage.startsWith('data:image/') &&
+      !finalImage.startsWith('/')
+    ) {
+      finalImage = `/products/${finalImage}`;
+    }
+
     if (editingProduct) {
       updateProduct(editingProduct.id, {
         name: formName.trim(),
@@ -250,8 +261,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
         shortDescription: formDescription.trim().slice(0, 100),
         dimensions: formDimensions.trim() || undefined,
         weight: formWeight.trim() || undefined,
-        image: formImage.trim(),
-        images: [formImage.trim()],
+        image: finalImage,
+        images: [finalImage],
         inStock: isAvailable,
         quantity: parsedQuantity
       });
@@ -265,8 +276,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
         shortDescription: formDescription.trim().slice(0, 100),
         dimensions: formDimensions.trim() || undefined,
         weight: formWeight.trim() || undefined,
-        image: formImage.trim(),
-        images: [formImage.trim()],
+        image: finalImage,
+        images: [finalImage],
         inStock: isAvailable,
         quantity: parsedQuantity,
         details: [
