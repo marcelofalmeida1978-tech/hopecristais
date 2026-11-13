@@ -30,5 +30,6 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Large local backup files (do not commit 67MB JSON to git)
+# Large local backup files (do not commit JSON backups to git)
 products_supabase_backup.json
+products_base64_backup.json

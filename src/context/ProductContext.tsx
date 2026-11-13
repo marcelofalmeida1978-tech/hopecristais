@@ -8,8 +8,12 @@ import {
   createFreshSupabaseClient
 } from '../lib/supabase';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { saveCatalogToIDB, loadCatalogFromIDB } from '../utils/indexedDbCache';
-import { getFallbackImage, HOPE_PLACEHOLDER_PATH } from '../utils/imageFallback';
+import { getFallbackImage } from '../utils/imageFallback';
+import {
+  CompressedImageUpload,
+  uploadProductImageBlob,
+  deleteProductStorageImages
+} from '../utils/storageImages';
 
 const STORAGE_KEY = 'hope_cristais_catalog_v2';
 const CATEGORIES_STORAGE_KEY = 'hope_cristais_categories_v2';
@@ -34,8 +38,15 @@ interface ProductContextType {
   products: Product[];
   categories: string[];
   dbTotalCount: number | null;
-  addProduct: (productData: Omit<Product, 'id'>) => Promise<Product>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  addProduct: (
+    productData: Omit<Product, 'id'>,
+    options?: { imageUpload?: CompressedImageUpload }
+  ) => Promise<Product>;
+  updateProduct: (
+    id: string,
+    updates: Partial<Product>,
+    options?: { imageUpload?: CompressedImageUpload }
+  ) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   toggleStock: (id: string) => Promise<void>;
   resetToDefaults: () => void;
@@ -399,34 +410,17 @@ const fetchExactProductCount = async (client: SupabaseClient): Promise<number | 
   return typeof count === 'number' ? count : null;
 };
 
-const METADATA_COLUMNS_WITH_QTY =
-  'id,name,category,price,price_formatted,description,short_description,dimensions,weight,in_stock,quantity,is_featured,tag,details,care_instructions,keywords,created_at,updated_at';
-const METADATA_COLUMNS_NO_QTY =
-  'id,name,category,price,price_formatted,description,short_description,dimensions,weight,in_stock,is_featured,tag,details,care_instructions,keywords,created_at,updated_at';
-
-function hasUsableCachedImage(p?: Product): boolean {
-  if (!p || !p.image) return false;
-  const img = p.image.trim();
-  if (!img || img === HOPE_PLACEHOLDER_PATH || img.startsWith('data:image/svg+xml')) return false;
-  return true;
-}
-
 /**
- * Busca 100% dos produtos no Supabase sem limite de 500 ou 1.000 linhas e sem timeout de base64:
- * 1. Pagina metadados em lotes de 1.000 linhas (com `{ count: 'exact' }`), retornando em <1s mesmo com milhares de produtos.
- * 2. Reaproveita imagens do cache local quando `updated_at` coincide e baixa as imagens faltantes/atualizadas em lotes adaptativos
- *    que se subdividem automaticamente caso algum registro grande gere timeout (57014).
+ * Busca 100% dos produtos no Supabase em lotes de 1.000 linhas com `{ count: 'exact' }`.
+ * Como todas as fotos ficam no Supabase Storage (URLs curtas), cada página retorna em milissegundos.
  */
-const fetchAllProductsResilient = async (
+const fetchAllProductsFast = async (
   client: SupabaseClient,
-  cachedProducts: Product[],
-  onMetadataReady: (products: Product[], exactCount: number, categories: string[]) => void,
-  onImagesBatch: (imageMap: Map<string, { image: string; images: string[] }>) => void,
   isCancelled: () => boolean
 ): Promise<{ products: Product[]; exactCount: number; categories: string[] }> => {
   const PAGE_SIZE = 1000;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allMetaRows: any[] = [];
+  const allRows: any[] = [];
   const seenIds = new Set<string>();
   let exactCount: number | null = null;
 
@@ -434,39 +428,27 @@ const fetchAllProductsResilient = async (
   while (true) {
     if (isCancelled()) break;
     const to = from + PAGE_SIZE - 1;
-    const useQty = supportsQuantityColumn !== false;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let res: { data: any[] | null; error: any; count: number | null } = await client
+    const { data, error, count } = await client
       .from('products')
-      .select(useQty ? METADATA_COLUMNS_WITH_QTY : METADATA_COLUMNS_NO_QTY, from === 0 ? { count: 'exact' } : undefined)
+      .select('*', from === 0 ? { count: 'exact' } : undefined)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
       .range(from, to);
 
-    if (res.error && useQty && isMissingQuantityColumnError(res.error)) {
-      supportsQuantityColumn = false;
-      res = await client
-        .from('products')
-        .select(METADATA_COLUMNS_NO_QTY, from === 0 ? { count: 'exact' } : undefined)
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: true })
-        .range(from, to);
+    if (error) {
+      throw new Error(`Erro ao listar produtos no Supabase: ${error.message}`);
     }
 
-    if (res.error) {
-      throw new Error(`Erro ao listar produtos no Supabase: ${res.error.message}`);
+    if (from === 0 && typeof count === 'number') {
+      exactCount = count;
     }
 
-    if (from === 0 && typeof res.count === 'number') {
-      exactCount = res.count;
-    }
-
-    const batch = res.data || [];
+    const batch = data || [];
     for (const row of batch) {
       if (row && row.id && !seenIds.has(row.id)) {
         seenIds.add(row.id);
-        allMetaRows.push(row);
+        allRows.push(row);
       }
     }
 
@@ -476,133 +458,18 @@ const fetchAllProductsResilient = async (
     from += PAGE_SIZE;
   }
 
-  if (isCancelled()) {
-    return { products: cachedProducts, exactCount: exactCount ?? cachedProducts.length, categories: [] };
-  }
-
-  const cachedById = new Map<string, Product>();
-  for (const cp of cachedProducts) {
-    if (cp && cp.id) cachedById.set(cp.id, cp);
-  }
-
-  const idsNeedingImages: string[] = [];
-  const sameTimestamp = (a?: string, b?: string): boolean => {
-    if (!a || !b) return false;
-    if (a === b) return true;
-    const ta = Date.parse(a);
-    const tb = Date.parse(b);
-    return !isNaN(ta) && !isNaN(tb) && ta === tb;
-  };
-
-  const hydratedProducts: Product[] = allMetaRows.map((row) => {
-    const cached = cachedById.get(row.id);
-    const hasCacheImg = hasUsableCachedImage(cached);
-    const isSameVersion = hasCacheImg && sameTimestamp(cached?.updatedAt, row.updated_at);
-
-    if (!isSameVersion) {
-      idsNeedingImages.push(row.id);
-    }
-
-    const rowWithImage = hasCacheImg
-      ? {
-          ...row,
-          image: cached!.image,
-          images: cached!.images && cached!.images.length > 0 ? cached!.images : [cached!.image]
-        }
-      : row;
-
-    return toProduct(rowWithImage);
-  });
-
+  const hydratedProducts = allRows.map(toProduct);
   hydratedProducts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const productCats = hydratedProducts.map((p) => p.category).filter(Boolean);
-  const resolvedCount = exactCount ?? hydratedProducts.length;
-
-  onMetadataReady(hydratedProducts, resolvedCount, productCats);
-
-  // Fase 2: buscar imagens faltantes ou desatualizadas em lotes adaptativos sem causar timeout 57014
-  if (idsNeedingImages.length > 0 && !isCancelled()) {
-    const imageMap = new Map<string, { image: string; images: string[] }>();
-
-    const fetchChunkAdaptive = async (chunkIds: string[]): Promise<void> => {
-      if (isCancelled() || chunkIds.length === 0) return;
-
-      const { data, error } = await client
-        .from('products')
-        .select('id,image,images')
-        .in('id', chunkIds);
-
-      if (!error && data) {
-        for (const r of data) {
-          if (!r || !r.id) continue;
-          const resolvedImg = resolveProductImage(r);
-          const resolvedImgs = resolveProductImages(r, resolvedImg);
-          imageMap.set(r.id, { image: resolvedImg, images: resolvedImgs });
-        }
-        return;
-      }
-
-      if (chunkIds.length > 1) {
-        const mid = Math.ceil(chunkIds.length / 2);
-        await fetchChunkAdaptive(chunkIds.slice(0, mid));
-        await fetchChunkAdaptive(chunkIds.slice(mid));
-        return;
-      }
-
-      // Fallback final para item único caso `images` array seja grande demais
-      const singleId = chunkIds[0];
-      const { data: singleData } = await client
-        .from('products')
-        .select('id,image')
-        .eq('id', singleId)
-        .maybeSingle();
-      if (singleData) {
-        const resolvedImg = resolveProductImage(singleData);
-        imageMap.set(singleId, { image: resolvedImg, images: [resolvedImg] });
-      }
-    };
-
-    const CHUNK_SIZE = 8;
-    const chunks: string[][] = [];
-    for (let i = 0; i < idsNeedingImages.length; i += CHUNK_SIZE) {
-      chunks.push(idsNeedingImages.slice(i, i + CHUNK_SIZE));
-    }
-
-    const CONCURRENCY = 2;
-    let processedChunks = 0;
-    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-      if (isCancelled()) break;
-      const group = chunks.slice(i, i + CONCURRENCY);
-      await Promise.all(group.map(fetchChunkAdaptive));
-      processedChunks += group.length;
-
-      // Atualiza progressivamente a interface a cada ~32 produtos carregados ou no final
-      if (imageMap.size > 0 && (processedChunks % 4 === 0 || i + CONCURRENCY >= chunks.length)) {
-        onImagesBatch(new Map(imageMap));
-      }
-    }
-
-    if (imageMap.size > 0 && !isCancelled()) {
-      const finalProducts = hydratedProducts.map((p) => {
-        const imgEntry = imageMap.get(p.id);
-        return imgEntry ? { ...p, image: imgEntry.image, images: imgEntry.images } : p;
-      });
-      return {
-        products: finalProducts,
-        exactCount: resolvedCount,
-        categories: productCats
-      };
-    }
-  }
 
   return {
     products: hydratedProducts,
-    exactCount: resolvedCount,
+    exactCount: exactCount ?? hydratedProducts.length,
     categories: productCats
   };
 };
 
-// Evita estourar os 5MB do localStorage com strings base64 gigantes: salva apenas versões leves no localStorage
+// Salva metadados e URLs leves no localStorage (nunca salva Base64)
 function saveLightweightProductsToLocalStorage(productsList: Product[]) {
   try {
     const light = productsList.map((p) => ({
@@ -613,11 +480,11 @@ function saveLightweightProductsToLocalStorage(productsList: Product[]) {
         : []
     }));
     const serialized = JSON.stringify(light);
-    if (serialized.length < 2_500_000) {
+    if (serialized.length < 3_500_000) {
       localStorage.setItem(STORAGE_KEY, serialized);
     }
   } catch {
-    // IndexedDB guarda o catálogo completo incluindo fotos base64
+    // safe
   }
 }
 
@@ -700,7 +567,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   hasLoadedSupabaseRef.current = hasLoadedSupabase;
   const syncSeqRef = useRef<number>(0);
   const inFlightReconnectRef = useRef<Promise<{ success: boolean; message: string }> | null>(null);
-  const idbProductsRef = useRef<Product[] | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const pendingUpsertIdsRef = useRef<Set<string>>(new Set());
 
@@ -717,25 +583,19 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Hidratação inicial do IndexedDB apenas antes de o Supabase responder (evita sobrescrever dados reais do banco)
+  // Limpa banco IndexedDB legado de Base64 caso exista no navegador e persiste URLs leves no localStorage
   useEffect(() => {
-    loadCatalogFromIDB()
-      .then((idbProducts) => {
-        if (idbProducts && Array.isArray(idbProducts) && idbProducts.length > 0) {
-          idbProductsRef.current = idbProducts;
-          if (!hasLoadedSupabaseRef.current) {
-            setProducts(idbProducts);
-          }
-        }
-      })
-      .catch(() => {});
+    try {
+      if (typeof window !== 'undefined' && 'indexedDB' in window) {
+        indexedDB.deleteDatabase('hope_cristais_db');
+      }
+    } catch {
+      // safe
+    }
   }, []);
 
-  // Persistir no IndexedDB (sem limite de 5MB) e metadados leves no localStorage
   useEffect(() => {
     if (hasLoadedSupabase || products.length >= INITIAL_PRODUCTS.length) {
-      idbProductsRef.current = products;
-      saveCatalogToIDB(products).catch(() => {});
       saveLightweightProductsToLocalStorage(products);
     }
   }, [products, hasLoadedSupabase]);
@@ -753,13 +613,12 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const reconnectSupabase = useCallback(
     async (
       urlToUse?: string,
-      options?: { waitForImages?: boolean }
+      _options?: { waitForImages?: boolean }
     ): Promise<{ success: boolean; message: string }> => {
       if (inFlightReconnectRef.current && !urlToUse) {
         return inFlightReconnectRef.current;
       }
 
-      const waitForImages = options?.waitForImages !== false;
       const targetUrl = (urlToUse || supabaseUrl || DEFAULT_SUPABASE_URL || '').trim();
       if (!targetUrl || !targetUrl.startsWith('http')) {
         setSupabaseConnected(false);
@@ -771,15 +630,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const seq = ++syncSeqRef.current;
       const isCancelled = () => syncSeqRef.current !== seq;
-
-      const metadataGate: {
-        resolve: ((res: { success: boolean; message: string }) => void) | null;
-      } = { resolve: null };
-      const metadataPhasePromise = !waitForImages
-        ? new Promise<{ success: boolean; message: string }>((resolve) => {
-            metadataGate.resolve = resolve;
-          })
-        : null;
 
       let task: Promise<{ success: boolean; message: string }> | null = null;
       task = (async (): Promise<{ success: boolean; message: string }> => {
@@ -800,15 +650,11 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setIsConnectingSupabase(false);
             setIsInitialLoading(false);
             setLastSyncError(countErr.message);
-            const failRes = { success: false, message: `Erro ao conectar: ${countErr.message}` };
-            metadataGate.resolve?.(failRes);
-            return failRes;
+            return { success: false, message: `Erro ao conectar: ${countErr.message}` };
           }
 
           if (isCancelled()) {
-            const cancelRes = { success: true, message: 'Sincronização substituída por atualização mais recente.' };
-            metadataGate.resolve?.(cancelRes);
-            return cancelRes;
+            return { success: true, message: 'Sincronização substituída por atualização mais recente.' };
           }
 
           setSupabaseConnected(true);
@@ -831,70 +677,26 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             console.warn('Aviso ao sincronizar categorias do Supabase:', catErr);
           }
 
-          // 3. Combinar cache em memória + IndexedDB para hidratação instantânea de imagens sem re-baixar 67MB
-          let cachedSource = productsRef.current;
-          if (!idbProductsRef.current) {
-            const idb = await loadCatalogFromIDB().catch(() => null);
-            if (idb && idb.length > 0) idbProductsRef.current = idb;
-          }
-          if (idbProductsRef.current && idbProductsRef.current.length > 0) {
-            const byId = new Map<string, Product>();
-            for (const p of idbProductsRef.current) byId.set(p.id, p);
-            for (const p of productsRef.current) {
-              if (hasUsableCachedImage(p) || !byId.has(p.id)) byId.set(p.id, p);
-            }
-            cachedSource = Array.from(byId.values());
-          }
-
+          // 3. Buscar catálogo completo (URLs do Storage + metadados leves) em <1s
           setIsSyncingImages(true);
-          const { products: fullProducts, exactCount } = await fetchAllProductsResilient(
-            client,
-            cachedSource,
-            (metaProducts, resolvedCount, metaCats) => {
-              if (isCancelled()) return;
-              setDbTotalCount(resolvedCount);
-              setProducts(metaProducts);
-              setHasLoadedSupabase(true);
-              hasLoadedSupabaseRef.current = true;
-              setIsConnectingSupabase(false);
-              setIsInitialLoading(false);
-
-              if (metaCats.length > 0) {
-                setCategories((prev) => Array.from(new Set([...prev, ...metaCats, 'Diversos'])));
-              }
-
-              metadataGate.resolve?.({
-                success: true,
-                message: 'Supabase conectado e sincronizado com sucesso!'
-              });
-            },
-            (imageMap) => {
-              if (isCancelled()) return;
-              setProducts((prev) =>
-                prev.map((p) => {
-                  const entry = imageMap.get(p.id);
-                  return entry ? { ...p, image: entry.image, images: entry.images } : p;
-                })
-              );
-            },
-            isCancelled
-          );
+          const { products: fullProducts, exactCount, categories: metaCats } =
+            await fetchAllProductsFast(client, isCancelled);
 
           if (!isCancelled()) {
             setDbTotalCount(exactCount);
             setProducts(fullProducts);
             setHasLoadedSupabase(true);
             hasLoadedSupabaseRef.current = true;
+            if (metaCats.length > 0) {
+              setCategories((prev) => Array.from(new Set([...prev, ...metaCats, 'Diversos'])));
+            }
             setIsSyncingImages(false);
             setIsConnectingSupabase(false);
             setIsInitialLoading(false);
-            saveCatalogToIDB(fullProducts).catch(() => {});
             saveLightweightProductsToLocalStorage(fullProducts);
           }
 
-          const okRes = { success: true, message: 'Supabase conectado e sincronizado com sucesso!' };
-          metadataGate.resolve?.(okRes);
-          return okRes;
+          return { success: true, message: 'Supabase conectado e sincronizado com sucesso!' };
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Falha ao conectar com o Supabase';
           if (!isCancelled()) {
@@ -903,9 +705,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setIsConnectingSupabase(false);
             setIsInitialLoading(false);
           }
-          const errRes = { success: false, message: msg };
-          metadataGate.resolve?.(errRes);
-          return errRes;
+          return { success: false, message: msg };
         } finally {
           if (task && inFlightReconnectRef.current === task) {
             inFlightReconnectRef.current = null;
@@ -916,7 +716,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!urlToUse) {
         inFlightReconnectRef.current = task;
       }
-      return metadataPhasePromise ? metadataPhasePromise : task;
+      return task;
     },
     [supabaseUrl]
   );
@@ -1053,22 +853,59 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const addProduct = async (productData: Omit<Product, 'id'>): Promise<Product> => {
+  const addProduct = async (
+    productData: Omit<Product, 'id'>,
+    options?: { imageUpload?: CompressedImageUpload }
+  ): Promise<Product> => {
     const newId = `hope-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const parsedQty = productData.quantity !== undefined ? Math.max(0, Number(productData.quantity)) : 1;
     const isAvailable = productData.inStock !== false && parsedQty > 0;
     const nowIso = new Date().toISOString();
 
+    let resolvedImage = (productData.image || '').trim();
+    let resolvedImages = Array.isArray(productData.images) ? [...productData.images] : [];
+    let uploadedUrl: string | null = null;
+
+    if (options?.imageUpload) {
+      if (!activeSupabaseClient) {
+        throw new Error('Conecte ao Supabase para enviar a foto para o Storage.');
+      }
+      uploadedUrl = await uploadProductImageBlob(
+        activeSupabaseClient,
+        newId,
+        options.imageUpload,
+        0
+      );
+      resolvedImage = uploadedUrl;
+      resolvedImages = [uploadedUrl];
+    }
+
+    if (
+      resolvedImage.startsWith('data:image/') ||
+      resolvedImages.some((img) => typeof img === 'string' && img.trim().startsWith('data:image/'))
+    ) {
+      throw new Error('Imagens em Base64 não são permitidas no banco. Selecione a foto para upload no Storage.');
+    }
+
     const newProduct: Product = {
       ...productData,
       id: newId,
+      image: resolvedImage,
+      images: resolvedImages.length > 0 ? resolvedImages : [resolvedImage],
       quantity: parsedQty,
       inStock: isAvailable,
       updatedAt: nowIso
     };
 
     if (activeSupabaseClient) {
-      await safeInsertProduct(activeSupabaseClient, newProduct);
+      try {
+        await safeInsertProduct(activeSupabaseClient, newProduct);
+      } catch (err) {
+        if (uploadedUrl) {
+          await deleteProductStorageImages(activeSupabaseClient, [uploadedUrl]);
+        }
+        throw err;
+      }
       pendingUpsertIdsRef.current.delete(newProduct.id);
       const exactCount = await fetchExactProductCount(activeSupabaseClient);
       setProducts((prev) => [newProduct, ...prev]);
@@ -1088,15 +925,49 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return newProduct;
   };
 
-  const updateProduct = async (id: string, updates: Partial<Product>): Promise<void> => {
+  const updateProduct = async (
+    id: string,
+    updates: Partial<Product>,
+    options?: { imageUpload?: CompressedImageUpload }
+  ): Promise<void> => {
     const existing = productsRef.current.find((item) => item.id === id);
     if (!existing) return;
 
+    const previousUrls = [existing.image, ...(existing.images || [])].filter(Boolean);
+    const nextUpdates: Partial<Product> = { ...updates };
+    let uploadedUrl: string | null = null;
+
+    if (options?.imageUpload) {
+      if (!activeSupabaseClient) {
+        throw new Error('Conecte ao Supabase para enviar a nova foto para o Storage.');
+      }
+      uploadedUrl = await uploadProductImageBlob(
+        activeSupabaseClient,
+        id,
+        options.imageUpload,
+        0
+      );
+      nextUpdates.image = uploadedUrl;
+      nextUpdates.images = [uploadedUrl];
+    }
+
     const merged: Product = {
       ...existing,
-      ...updates,
+      ...nextUpdates,
       updatedAt: new Date().toISOString()
     };
+
+    if (
+      (merged.image || '').trim().startsWith('data:image/') ||
+      (Array.isArray(merged.images) &&
+        merged.images.some((img) => typeof img === 'string' && img.trim().startsWith('data:image/')))
+    ) {
+      if (uploadedUrl && activeSupabaseClient) {
+        await deleteProductStorageImages(activeSupabaseClient, [uploadedUrl]);
+      }
+      throw new Error('Imagens em Base64 não são permitidas no banco. Faça upload pelo Supabase Storage.');
+    }
+
     if (merged.quantity !== undefined) {
       const num = Math.max(0, Number(merged.quantity));
       merged.quantity = num;
@@ -1108,7 +979,20 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     if (activeSupabaseClient) {
-      await safeUpdateProduct(activeSupabaseClient, merged);
+      try {
+        await safeUpdateProduct(activeSupabaseClient, merged);
+      } catch (err) {
+        if (uploadedUrl) {
+          await deleteProductStorageImages(activeSupabaseClient, [uploadedUrl]);
+        }
+        throw err;
+      }
+
+      const nextUrlSet = new Set([merged.image, ...(merged.images || [])].filter(Boolean));
+      const removedUrls = previousUrls.filter((u) => !nextUrlSet.has(u));
+      if (removedUrls.length > 0) {
+        await deleteProductStorageImages(activeSupabaseClient, removedUrls);
+      }
     }
 
     setProducts((prev) => prev.map((item) => (item.id === id ? merged : item)));
@@ -1116,6 +1000,11 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteProduct = async (id: string): Promise<void> => {
+    const target = productsRef.current.find((item) => item.id === id);
+    const urlsToDelete = target
+      ? [target.image, ...(target.images || [])].filter(Boolean)
+      : [];
+
     if (activeSupabaseClient) {
       const { error } = await activeSupabaseClient
         .from('products')
@@ -1124,6 +1013,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (error) {
         throw new Error(`Falha ao excluir produto no Supabase: ${error.message}`);
+      }
+
+      if (urlsToDelete.length > 0) {
+        await deleteProductStorageImages(activeSupabaseClient, urlsToDelete);
       }
 
       const exactCount = await fetchExactProductCount(activeSupabaseClient);
@@ -1227,8 +1120,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
 
-      // 4. Invalidação de cache e broadcast imediato para painel e vitrine
-      saveCatalogToIDB(productsRef.current).catch(() => {});
+      // 4. Invalidação de cache leve e broadcast imediato para painel e vitrine
       saveLightweightProductsToLocalStorage(productsRef.current);
       window.dispatchEvent(new CustomEvent('hope_catalog_updated'));
       notifyOtherTabs();

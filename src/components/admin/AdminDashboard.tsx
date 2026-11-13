@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useProducts } from '../../context/ProductContext';
 import { Product } from '../../types';
 import { Logo } from '../ui/Logo';
-import { compressImage } from '../../utils/imageCompressor';
+import { compressImageToBlob } from '../../utils/imageCompressor';
+import { CompressedImageUpload } from '../../utils/storageImages';
 import { handleImageError, getFallbackImage } from '../../utils/imageFallback';
 import {
   Plus,
@@ -100,6 +101,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
   const [formDimensions, setFormDimensions] = useState('');
   const [formWeight, setFormWeight] = useState('');
   const [formImage, setFormImage] = useState('');
+  const [pendingImageUpload, setPendingImageUpload] = useState<CompressedImageUpload | null>(null);
   const [formInStock, setFormInStock] = useState(true);
   const [formQuantity, setFormQuantity] = useState<number | string>(1);
   const [formImageProcessing, setFormImageProcessing] = useState(false);
@@ -107,6 +109,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
   const [formError, setFormError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
+
+  const revokePreviewObjectUrl = () => {
+    if (previewObjectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      } catch {
+        // safe
+      }
+      previewObjectUrlRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      revokePreviewObjectUrl();
+    };
+  }, []);
 
   // Helper to add new category
   const handleConfirmAddCategory = () => {
@@ -125,6 +145,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
 
   // Handle Opening Add Modal
   const handleOpenAddModal = () => {
+    revokePreviewObjectUrl();
+    setPendingImageUpload(null);
     setEditingProduct(null);
     setFormName('');
     setFormCategory(categories[0] || 'Cristais');
@@ -144,6 +166,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
 
   // Handle Opening Edit Modal
   const handleOpenEditModal = (product: Product) => {
+    revokePreviewObjectUrl();
+    setPendingImageUpload(null);
     setEditingProduct(product);
     setFormName(product.name);
     setFormCategory(product.category || 'Diversos');
@@ -172,7 +196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
     setIsProductModalOpen(true);
   };
 
-  // Handle Device Photo Upload
+  // Handle Device Photo Upload (comprime para WebP/JPEG máx 1200px e prepara envio ao Supabase Storage)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -180,9 +204,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
     try {
       setFormImageProcessing(true);
       setFormError(null);
-      // Otimiza e converte foto do celular/computador
-      const compressedDataUrl = await compressImage(file, 1200, 1200, 0.84);
-      setFormImage(compressedDataUrl);
+      const compressed = await compressImageToBlob(file, 1200, 1200, 0.84);
+      revokePreviewObjectUrl();
+      const objectUrl = URL.createObjectURL(compressed.blob);
+      previewObjectUrlRef.current = objectUrl;
+      setPendingImageUpload(compressed);
+      setFormImage(objectUrl);
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error ? err.message : 'Falha ao processar a foto selecionada.';
@@ -223,7 +250,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
       return;
     }
 
-    if (!formImage.trim()) {
+    if (!pendingImageUpload && !formImage.trim()) {
       setFormError('Selecione ou mantenha a foto da peça.');
       return;
     }
@@ -243,56 +270,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
     const formattedPriceStr = `R$ ${parsedPrice.toFixed(2).replace('.', ',')}`;
 
     let finalImage = formImage.trim();
-    if (
-      finalImage &&
-      !finalImage.startsWith('http://') &&
-      !finalImage.startsWith('https://') &&
-      !finalImage.startsWith('data:image/') &&
-      !finalImage.startsWith('/')
-    ) {
-      finalImage = `/products/${finalImage}`;
+    if (!pendingImageUpload) {
+      if (finalImage.startsWith('data:image/')) {
+        setFormError('Por favor, selecione a imagem novamente para enviar ao Supabase Storage.');
+        return;
+      }
+      if (
+        finalImage &&
+        !finalImage.startsWith('http://') &&
+        !finalImage.startsWith('https://') &&
+        !finalImage.startsWith('/')
+      ) {
+        finalImage = `/products/${finalImage}`;
+      }
     }
 
     setIsSavingProduct(true);
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.id, {
-          name: formName.trim(),
-          category: finalCategory,
-          price: parsedPrice,
-          priceFormatted: formattedPriceStr,
-          description: formDescription.trim(),
-          shortDescription: formDescription.trim().slice(0, 100),
-          dimensions: formDimensions.trim() || undefined,
-          weight: formWeight.trim() || undefined,
-          image: finalImage,
-          images: [finalImage],
-          inStock: isAvailable,
-          quantity: parsedQuantity
-        });
+        await updateProduct(
+          editingProduct.id,
+          {
+            name: formName.trim(),
+            category: finalCategory,
+            price: parsedPrice,
+            priceFormatted: formattedPriceStr,
+            description: formDescription.trim(),
+            shortDescription: formDescription.trim().slice(0, 100),
+            dimensions: formDimensions.trim() || undefined,
+            weight: formWeight.trim() || undefined,
+            ...(pendingImageUpload ? {} : { image: finalImage, images: [finalImage] }),
+            inStock: isAvailable,
+            quantity: parsedQuantity
+          },
+          { imageUpload: pendingImageUpload || undefined }
+        );
       } else {
-        await addProduct({
-          name: formName.trim(),
-          category: finalCategory,
-          price: parsedPrice,
-          priceFormatted: formattedPriceStr,
-          description: formDescription.trim(),
-          shortDescription: formDescription.trim().slice(0, 100),
-          dimensions: formDimensions.trim() || undefined,
-          weight: formWeight.trim() || undefined,
-          image: finalImage,
-          images: [finalImage],
-          inStock: isAvailable,
-          quantity: parsedQuantity,
-          details: [
-            'Peça 100% natural',
-            'Energizada e selecionada manualmente',
-            'Envio seguro em embalagem protegida'
-          ],
-          keywords: [formName.toLowerCase(), finalCategory.toLowerCase(), 'cristal', 'pedra']
-        });
+        await addProduct(
+          {
+            name: formName.trim(),
+            category: finalCategory,
+            price: parsedPrice,
+            priceFormatted: formattedPriceStr,
+            description: formDescription.trim(),
+            shortDescription: formDescription.trim().slice(0, 100),
+            dimensions: formDimensions.trim() || undefined,
+            weight: formWeight.trim() || undefined,
+            image: pendingImageUpload ? '' : finalImage,
+            images: pendingImageUpload ? [] : [finalImage],
+            inStock: isAvailable,
+            quantity: parsedQuantity,
+            details: [
+              'Peça 100% natural',
+              'Energizada e selecionada manualmente',
+              'Envio seguro em embalagem protegida'
+            ],
+            keywords: [formName.toLowerCase(), finalCategory.toLowerCase(), 'cristal', 'pedra']
+          },
+          { imageUpload: pendingImageUpload || undefined }
+        );
       }
 
+      revokePreviewObjectUrl();
+      setPendingImageUpload(null);
       setIsProductModalOpen(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar produto no banco de dados.';
@@ -1340,26 +1380,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        color: 'var(--hope-purple)',
-                        border: '1px solid #DDD6FE',
-                        borderRadius: '8px',
-                        padding: '8px 14px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <Upload size={14} />
-                      Trocar Foto
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          color: 'var(--hope-purple)',
+                          border: '1px solid #DDD6FE',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Upload size={14} />
+                        Trocar Foto
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          revokePreviewObjectUrl();
+                          setPendingImageUpload(null);
+                          setFormImage('');
+                        }}
+                        style={{
+                          backgroundColor: '#FFF5F5',
+                          color: '#E53E3E',
+                          border: '1px solid #FED7D7',
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Remover foto atual"
+                      >
+                        <Trash2 size={14} />
+                        Remover
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -1418,8 +1486,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                       <input
                         type="text"
                         placeholder="https://exemplo.com/foto.jpg"
-                        value={formImage.startsWith('data:') ? '' : formImage}
-                        onChange={(e) => setFormImage(e.target.value)}
+                        value={formImage.startsWith('data:') || formImage.startsWith('blob:') ? '' : formImage}
+                        onChange={(e) => {
+                          revokePreviewObjectUrl();
+                          setPendingImageUpload(null);
+                          setFormImage(e.target.value);
+                        }}
                         style={{
                           width: '100%',
                           padding: '8px 12px',
@@ -1788,7 +1860,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsProductModalOpen(false)}
+                  onClick={() => {
+                    revokePreviewObjectUrl();
+                    setPendingImageUpload(null);
+                    setIsProductModalOpen(false);
+                  }}
                   style={{
                     backgroundColor: '#F1F5F9',
                     color: '#475569',
