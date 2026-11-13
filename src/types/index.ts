@@ -28,6 +28,7 @@ export interface Product {
   tag?: string;
   inStock?: boolean;
   quantity?: number;
+  updatedAt?: string;
 }
 
 export interface CartItem {

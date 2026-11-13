@@ -35,15 +35,37 @@ export const SUPABASE_ANON_KEY: string = SUPABASE_PUBLISHABLE_KEY;
 export const SUPABASE_SECRET_KEY: string =
   (import.meta.env.VITE_SUPABASE_SECRET_KEY as string) || '';
 
+// Fetch customizado sem cache para garantir dados em tempo real do Supabase (sem cache HTTP do navegador/CDN)
+export const noStoreFetch: typeof fetch = (input, init) => {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  if (!headers.has('Pragma')) {
+    headers.set('Pragma', 'no-cache');
+  }
+  return fetch(input, {
+    ...init,
+    cache: 'no-store',
+    headers
+  });
+};
+
+export const createFreshSupabaseClient = (url: string, key: string) =>
+  createClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true
+    },
+    global: {
+      fetch: noStoreFetch
+    }
+  });
+
 // Criação do cliente Supabase seguro
 export const supabase =
   SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_PUBLISHABLE_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true
-        }
-      })
+    ? createFreshSupabaseClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
     : null;
 
 /**
@@ -66,7 +88,7 @@ export async function testSupabaseConnection(url?: string): Promise<{ success: b
   }
 
   try {
-    const client = createClient(targetUrl, keyToUse);
+    const client = createFreshSupabaseClient(targetUrl, keyToUse);
     const { error } = await client.from('products').select('id', { count: 'exact', head: true });
     if (error && error.code !== 'PGRST116' && error.code !== '42703') {
       return { success: false, message: `Erro ao conectar: ${error.message}` };

@@ -23,7 +23,8 @@ import {
   Database,
   Settings,
   Link2,
-  Package
+  Package,
+  RefreshCw
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -35,39 +36,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
   const {
     products,
     categories,
+    dbTotalCount,
     addProduct,
     updateProduct,
     deleteProduct,
     toggleStock,
     addCategory,
     deleteCategories,
-    deployHookUrl,
-    setDeployHookUrl,
     supabaseUrl,
     setSupabaseUrl,
     supabaseConnected,
     isConnectingSupabase,
     isInitialLoading,
     hasLoadedSupabase,
+    isSyncingImages,
+    lastSyncError,
     reconnectSupabase,
-    triggerDeploy
+    refreshCatalog,
+    saveAndRevalidateSite
   } = useProducts();
 
   // Enquanto o Supabase estiver conectando na inicialização e o catálogo do banco ainda não tiver terminado de carregar,
-  // ocultamos qualquer resquício antigo ou desatualizado do cache local para exibir direto os 68 produtos oficiais.
+  // ocultamos qualquer resquício antigo ou desatualizado do cache local para exibir direto os produtos oficiais.
   const isAwaitingSupabase = !hasLoadedSupabase && (isConnectingSupabase || isInitialLoading);
 
-  // Conectar o Supabase automaticamente ao abrir o painel administrativo
+  // Sincronizar sempre com o Supabase ao abrir o painel administrativo para garantir contagem exata e lista 100% atualizada
   useEffect(() => {
-    if (!supabaseConnected && !isConnectingSupabase) {
-      reconnectSupabase();
-    }
-  }, []);
+    refreshCatalog();
+  }, [refreshCatalog]);
 
   // Settings Modal State
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [tempSupabaseUrl, setTempSupabaseUrl] = useState(supabaseUrl);
-  const [tempDeployHookUrl, setTempDeployHookUrl] = useState(deployHookUrl);
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
 
   // Search and Filter State
@@ -103,6 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
   const [formInStock, setFormInStock] = useState(true);
   const [formQuantity, setFormQuantity] = useState<number | string>(1);
   const [formImageProcessing, setFormImageProcessing] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -196,8 +197,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
   };
 
   // Submit Product Form
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingProduct) return;
     setFormError(null);
 
     if (!formName.trim()) {
@@ -251,73 +253,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
       finalImage = `/products/${finalImage}`;
     }
 
-    if (editingProduct) {
-      updateProduct(editingProduct.id, {
-        name: formName.trim(),
-        category: finalCategory,
-        price: parsedPrice,
-        priceFormatted: formattedPriceStr,
-        description: formDescription.trim(),
-        shortDescription: formDescription.trim().slice(0, 100),
-        dimensions: formDimensions.trim() || undefined,
-        weight: formWeight.trim() || undefined,
-        image: finalImage,
-        images: [finalImage],
-        inStock: isAvailable,
-        quantity: parsedQuantity
-      });
-    } else {
-      addProduct({
-        name: formName.trim(),
-        category: finalCategory,
-        price: parsedPrice,
-        priceFormatted: formattedPriceStr,
-        description: formDescription.trim(),
-        shortDescription: formDescription.trim().slice(0, 100),
-        dimensions: formDimensions.trim() || undefined,
-        weight: formWeight.trim() || undefined,
-        image: finalImage,
-        images: [finalImage],
-        inStock: isAvailable,
-        quantity: parsedQuantity,
-        details: [
-          'Peça 100% natural',
-          'Energizada e selecionada manualmente',
-          'Envio seguro em embalagem protegida'
-        ],
-        keywords: [formName.toLowerCase(), finalCategory.toLowerCase(), 'cristal', 'pedra']
-      });
-    }
+    setIsSavingProduct(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, {
+          name: formName.trim(),
+          category: finalCategory,
+          price: parsedPrice,
+          priceFormatted: formattedPriceStr,
+          description: formDescription.trim(),
+          shortDescription: formDescription.trim().slice(0, 100),
+          dimensions: formDimensions.trim() || undefined,
+          weight: formWeight.trim() || undefined,
+          image: finalImage,
+          images: [finalImage],
+          inStock: isAvailable,
+          quantity: parsedQuantity
+        });
+      } else {
+        await addProduct({
+          name: formName.trim(),
+          category: finalCategory,
+          price: parsedPrice,
+          priceFormatted: formattedPriceStr,
+          description: formDescription.trim(),
+          shortDescription: formDescription.trim().slice(0, 100),
+          dimensions: formDimensions.trim() || undefined,
+          weight: formWeight.trim() || undefined,
+          image: finalImage,
+          images: [finalImage],
+          inStock: isAvailable,
+          quantity: parsedQuantity,
+          details: [
+            'Peça 100% natural',
+            'Energizada e selecionada manualmente',
+            'Envio seguro em embalagem protegida'
+          ],
+          keywords: [formName.toLowerCase(), finalCategory.toLowerCase(), 'cristal', 'pedra']
+        });
+      }
 
-    setIsProductModalOpen(false);
+      setIsProductModalOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar produto no banco de dados.';
+      setFormError(msg);
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
-  // Handle Deploy Action
-  const handleDeployToVercel = async () => {
+  // Handle Instant Save & Revalidate Action (sem Deploy Hook na Vercel)
+  const handleSaveAndRevalidateSite = async () => {
     setIsDeployModalOpen(true);
     setIsDeploying(true);
     setDeployStep(1);
-    setDeployStatusText('Salvando alterações pendentes no banco de dados...');
+    setDeployStatusText('Validando alterações e consultando contagem exata no Supabase...');
 
-    await new Promise((r) => setTimeout(r, 400));
     setDeployStep(2);
-    setDeployStatusText('Puxando todos os produtos e categorias cadastradas no Supabase...');
-
-    const result = await triggerDeploy();
+    const result = await saveAndRevalidateSite();
 
     setDeployStep(3);
-    setDeployStatusText('Atualizando vitrine da loja e painel administrativo...');
-    await new Promise((r) => setTimeout(r, 500));
-
+    setDeployStatusText(
+      result.message || 'Salvo e site atualizado! Painel administrativo e vitrine sincronizados em tempo real.'
+    );
     setDeployStep(4);
-    setDeployStatusText(result.message || 'Todos os produtos foram puxados do Supabase e sincronizados com a loja online!');
     setIsDeploying(false);
   };
 
-  // Salvar configurações de Supabase e Vercel
+  // Salvar configurações de Supabase
   const handleSaveSettings = async () => {
     setSettingsStatus('Salvando configurações...');
-    setDeployHookUrl(tempDeployHookUrl);
     await setSupabaseUrl(tempSupabaseUrl);
     setSettingsStatus('Configurações salvas com sucesso!');
     setTimeout(() => {
@@ -357,9 +362,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
     return matchesSearch && matchesCategory && matchesStock;
   });
 
-  const totalProducts = products.length;
+  const totalProducts = dbTotalCount !== null ? dbTotalCount : products.length;
   const inStockCount = products.filter((p) => p.inStock !== false && (p.quantity === undefined || p.quantity > 0)).length;
-  const outOfStockCount = totalProducts - inStockCount;
+  const outOfStockCount = Math.max(0, products.length - inStockCount);
   const totalPiecesInStock = products.reduce((acc, p) => {
     const isAvail = p.inStock !== false && (p.quantity === undefined || p.quantity > 0);
     const qty = isAvail ? (p.quantity !== undefined ? p.quantity : 1) : 0;
@@ -430,25 +435,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Supabase Status Pill */}
+            {/* Supabase Status Pill + Refresh */}
             {supabaseConnected ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#DCFCE7',
-                  color: '#15803D',
-                  padding: '7px 12px',
-                  borderRadius: '20px',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  border: '1px solid #BBF7D0'
-                }}
-                title="Banco de dados Supabase conectado e sincronizado"
-              >
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
-                <span>Supabase Conectado</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#DCFCE7',
+                    color: '#15803D',
+                    padding: '7px 12px',
+                    borderRadius: '20px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    border: '1px solid #BBF7D0'
+                  }}
+                  title="Banco de dados Supabase conectado e sincronizado"
+                >
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
+                  <span>{isSyncingImages ? 'Sincronizando fotos...' : 'Supabase Conectado'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshCatalog()}
+                  disabled={isConnectingSupabase}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#475569',
+                    border: '1px solid #E2E8F0',
+                    padding: '7px 10px',
+                    borderRadius: '20px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: isConnectingSupabase ? 'wait' : 'pointer'
+                  }}
+                  title="Forçar atualização direta do Supabase"
+                >
+                  <RefreshCw size={13} style={isConnectingSupabase ? { animation: 'spin 1s linear infinite' } : undefined} />
+                  <span>Sincronizar</span>
+                </button>
               </div>
             ) : isConnectingSupabase ? (
               <div
@@ -502,9 +531,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
               </button>
             )}
 
-            {/* Deploy Button */}
+            {/* Save & Revalidate Button */}
             <button
-              onClick={handleDeployToVercel}
+              onClick={handleSaveAndRevalidateSite}
               style={{
                 backgroundColor: 'var(--hope-purple)',
                 color: '#FFFFFF',
@@ -521,7 +550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                 boxShadow: '0 4px 12px rgba(107, 43, 114, 0.3)',
                 transition: 'all 0.2s ease'
               }}
-              title="Salva alterações no Supabase e atualiza o site na Vercel"
+              title="Salva alterações no Supabase e revalida painel e vitrine instantaneamente"
             >
               <CloudLightning size={16} />
               <span>SALVAR E ATUALIZAR SITE</span>
@@ -531,7 +560,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
             <button
               onClick={() => {
                 setTempSupabaseUrl(supabaseUrl);
-                setTempDeployHookUrl(deployHookUrl);
                 setIsSettingsModalOpen(true);
               }}
               style={{
@@ -630,6 +658,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                   totalProducts
                 )}
               </p>
+              {!isAwaitingSupabase && dbTotalCount !== null && (
+                <p style={{ fontSize: '10.5px', color: lastSyncError ? '#DC2626' : '#64748B', margin: '4px 0 0' }}>
+                  {lastSyncError
+                    ? `Erro de sync: ${lastSyncError}`
+                    : `${products.length} listados • contagem exata do banco`}
+                </p>
+              )}
             </div>
             <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: '#F3E8FF', color: 'var(--hope-purple)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Tag size={22} />
@@ -1038,7 +1073,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                         {/* Toggle Stock ("Dar Baixa") */}
                         <td style={{ padding: '12px 20px', textAlign: 'center' }}>
                           <button
-                            onClick={() => toggleStock(p.id)}
+                            onClick={async () => {
+                              try {
+                                await toggleStock(p.id);
+                              } catch (err: unknown) {
+                                alert(err instanceof Error ? err.message : 'Erro ao atualizar estoque.');
+                              }
+                            }}
                             style={{
                               backgroundColor: isInStock ? '#FEF2F2' : '#ECFDF5',
                               color: isInStock ? '#DC2626' : '#059669',
@@ -1080,9 +1121,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                             </button>
 
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 if (window.confirm(`Deseja realmente excluir "${p.name}" do catálogo?`)) {
-                                  deleteProduct(p.id);
+                                  try {
+                                    await deleteProduct(p.id);
+                                  } catch (err: unknown) {
+                                    alert(err instanceof Error ? err.message : 'Erro ao excluir produto no Supabase.');
+                                  }
                                 }
                               }}
                               style={{
@@ -1759,7 +1804,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
 
                 <button
                   type="submit"
-                  disabled={formImageProcessing}
+                  disabled={formImageProcessing || isSavingProduct}
                   style={{
                     backgroundColor: 'var(--hope-purple)',
                     color: '#FFFFFF',
@@ -1768,7 +1813,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                     padding: '10px 22px',
                     fontSize: '13px',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: isSavingProduct ? 'wait' : 'pointer',
+                    opacity: isSavingProduct ? 0.75 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1776,7 +1822,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
                   }}
                 >
                   <Sparkles size={16} />
-                  <span>{editingProduct ? 'Salvar Alterações' : 'Cadastrar Peça'}</span>
+                  <span>
+                    {isSavingProduct
+                      ? 'Salvando no Supabase...'
+                      : editingProduct
+                      ? 'Salvar Alterações'
+                      : 'Cadastrar Peça'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1832,7 +1884,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
             </div>
 
             <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: 'var(--hope-purple-dark)', margin: '0 0 10px' }}>
-              {isDeploying ? 'Atualizando Dados no Site...' : 'Site Atualizado com Sucesso!'}
+              {isDeploying ? 'Sincronizando com Supabase...' : 'Salvo e site atualizado!'}
             </h3>
 
             <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: 1.5, marginBottom: '24px' }}>
@@ -1843,15 +1895,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
             <div style={{ textAlign: 'left', backgroundColor: '#F8FAFC', borderRadius: '12px', padding: '16px', marginBottom: '24px', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deployStep >= 1 ? '#059669' : '#94A3B8' }}>
                 <CheckCircle2 size={16} />
-                <span>Alterações salvas no banco de dados</span>
+                <span>Alterações salvas e validadas no Supabase</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deployStep >= 2 ? '#059669' : '#94A3B8' }}>
                 <CheckCircle2 size={16} />
-                <span>Todos os produtos cadastrados puxados do Supabase</span>
+                <span>Contagem exata e catálogo completo revalidados</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deployStep >= 3 ? '#059669' : '#94A3B8' }}>
                 <CheckCircle2 size={16} />
-                <span>Painel administrativo e loja online 100% atualizados</span>
+                <span>Painel administrativo e vitrine atualizados instantaneamente</span>
               </div>
             </div>
 
@@ -2217,36 +2269,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onView
               </div>
             </div>
 
-            {/* Vercel Deploy Hook Section */}
-            <div style={{ backgroundColor: '#F8FAFC', borderRadius: '14px', padding: '18px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <CloudLightning size={17} color="var(--hope-purple)" />
-                <span style={{ fontWeight: 600, fontSize: '14px', color: '#1E293B' }}>Deploy Automático Vercel</span>
+            {/* Atualização Instantânea Info Section */}
+            <div style={{ backgroundColor: '#F0FDF4', borderRadius: '14px', padding: '16px 18px', border: '1px solid #BBF7D0', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <CloudLightning size={17} color="#15803D" />
+                <span style={{ fontWeight: 600, fontSize: '14px', color: '#166534' }}>Atualização em Tempo Real (Sem Rebuild)</span>
               </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
-                  URL do Deploy Hook (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://api.vercel.com/v1/integrations/deploy/..."
-                  value={tempDeployHookUrl}
-                  onChange={(e) => setTempDeployHookUrl(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                  Encontre em: Vercel &gt; Project Settings &gt; Git &gt; Deploy Hooks &gt; Criar Hook.
-                </span>
-              </div>
+              <p style={{ margin: 0, fontSize: '12px', color: '#15803D', lineHeight: 1.5 }}>
+                O botão <strong>Salvar e Atualizar Site</strong> sincroniza diretamente com o Supabase e invalida o cache da vitrine e do painel instantaneamente, sem disparar novos builds na Vercel.
+              </p>
             </div>
 
             {/* Footer Buttons */}
